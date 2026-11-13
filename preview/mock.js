@@ -47,7 +47,8 @@ function seed() {
   ]
 }
 
-export function createMock({ empty = false } = {}) {
+export function createMock({ empty = false, alert = false } = {}) {
+  let alertOnce = alert
   const state = {
     now: Date.now(),
     pet: { name: '阿墨', position: null, edge: 'right', quiet: false, collapsed: true, seenAt: 0 },
@@ -60,11 +61,13 @@ export function createMock({ empty = false } = {}) {
 
   const snap = extra => {
     const now = Date.now()
-    const memos = sortMemos(state.memos)
+    const memos = sortMemos(state.memos.filter(memo => !memo.removedAt))
+    const trash = state.memos.filter(memo => memo.removedAt).sort((a, b) => (b.removedAt ?? 0) - (a.removedAt ?? 0))
     return {
       ...state,
       now,
       memos,
+      trash,
       stats: statsFor(memos, now),
       suggestions: suggestionsFor(memos, now),
       lines: petLines(memos, now),
@@ -136,8 +139,50 @@ export function createMock({ empty = false } = {}) {
       return snap()
     }
     if (op === 'memo/remove') {
-      state.memos = state.memos.filter(item => item.id !== input.id)
+      const memo = state.memos.find(item => item.id === input.id)
+      if (memo) { memo.removedAt = Date.now(); memo.snoozedUntil = null }
       return snap()
+    }
+    if (op === 'memo/restore') {
+      const memo = state.memos.find(item => item.id === input.id)
+      if (memo) memo.removedAt = null
+      return snap()
+    }
+    if (op === 'memo/purge') {
+      state.memos = input.id ? state.memos.filter(item => item.id !== input.id) : state.memos.filter(item => !item.removedAt)
+      return snap()
+    }
+    if (op === 'memo/schedule') {
+      const memo = state.memos.find(item => item.id === input.id)
+      if (memo) {
+        memo.dueAt = String(input.text ?? '').trim() ? parseDue(String(input.text)) : null
+        memo.nudgedAt = 0
+        memo.snoozedUntil = null
+        memo.updatedAt = Date.now()
+      }
+      return snap()
+    }
+    if (op === 'memo/snooze') {
+      const memo = state.memos.find(item => item.id === input.id)
+      if (memo) {
+        memo.snoozedUntil = Date.now() + Number(input.minutes ?? 10) * 60_000
+        memo.nudgedAt = 0
+      }
+      return snap()
+    }
+    if (op === 'memo/bulk-due') {
+      const ids = Array.isArray(input.ids) ? input.ids : []
+      const dueAt = String(input.text ?? '').trim() ? parseDue(String(input.text)) : null
+      for (const memo of state.memos) if (ids.includes(memo.id)) { memo.dueAt = dueAt; memo.nudgedAt = 0; memo.snoozedUntil = null }
+      return snap()
+    }
+    if (op === 'alerts') {
+      if (!alertOnce) return { alert: null }
+      alertOnce = false
+      const memo = state.memos.find(item => !item.done && !item.removedAt)
+      if (!memo) return { alert: null }
+      memo.nudgedAt = Date.now()
+      return { alert: { id: memo.id, title: memo.title, body: memo.body, dueAt: memo.dueAt ?? Date.now(), link: memo.link } }
     }
     if (op === 'memo/add') {
       const parsed = parseMemo(String(input.text ?? ''))
@@ -159,7 +204,8 @@ export function createMock({ empty = false } = {}) {
       return snap()
     }
     if (op === 'memo/clear-done') {
-      state.memos = state.memos.filter(item => !item.done)
+      const now = Date.now()
+      state.memos.forEach(item => { if (item.done && !item.removedAt) { item.removedAt = now; item.updatedAt = now } })
       return snap()
     }
     if (op === 'memo/clear-all') {

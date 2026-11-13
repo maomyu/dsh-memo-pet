@@ -6,7 +6,7 @@ import { createMock } from './mock.js'
 const params = new URLSearchParams(location.search)
 const mode = params.get('mode') ?? 'open'
 
-const mock = createMock({ empty: mode === 'empty' })
+const mock = createMock({ empty: mode === 'empty', alert: mode === 'alert' })
 let Overlay = null
 
 const opened = []
@@ -95,6 +95,27 @@ if (mode === 'settings') {
 if (mode === 'empty') {
   await wait(360)
   document.querySelector('.mp-grab')?.click()
+}
+if (mode === 'alert') {
+  await wait(900)
+  document.querySelector('.mp-peek')?.setAttribute('data-alert-probe', '1')
+}
+if (mode === 'done') {
+  await wait(360)
+  document.querySelector('.mp-grab')?.click()
+  await wait(500)
+  document.querySelectorAll('.mp-views button')[1]?.click()
+  await wait(300)
+}
+if (mode === 'trash') {
+  await wait(360)
+  document.querySelector('.mp-grab')?.click()
+  await wait(500)
+  const first = document.querySelector('.mp-row .mp-icon-danger')
+  first?.click()
+  await wait(300)
+  document.querySelectorAll('.mp-views button')[2]?.click()
+  await wait(300)
 }
 if (mode === 'link') {
   await wait(360)

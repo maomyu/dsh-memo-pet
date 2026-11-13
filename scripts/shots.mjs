@@ -25,6 +25,9 @@ const shots = [
   { name: 'empty-dark', query: '?mode=empty&theme=dark', size: [1440, 900] },
   { name: 'after-add', query: '?mode=after-add&theme=dark', size: [1440, 900] },
   { name: 'mobile-open', query: '?mode=open&theme=dark', size: [390, 844] },
+  { name: 'alert-dark', query: '?mode=alert&theme=dark', size: [1440, 900] },
+  { name: 'trash-dark', query: '?mode=trash&theme=dark', size: [1440, 900] },
+  { name: 'done-dark', query: '?mode=done&theme=dark', size: [1440, 900] },
 ]
 
 await mkdir(out, { recursive: true })

@@ -82,15 +82,20 @@ export function cleanMemo(raw, now = Date.now()) {
   const createdAt = Number.isFinite(raw.createdAt) ? Number(raw.createdAt) : now
   const rawLink = typeof raw.link === 'string' ? raw.link.trim() : ''
   const link = /^https?:\/\//i.test(rawLink) ? rawLink.slice(0, 2048) : ''
+  const done = raw.done === true
   return {
     id,
     title,
     link,
     body: cleanString(raw.body, LIMITS.body),
     tags: cleanTags(raw.tags),
-    done: raw.done === true,
+    done,
     pinned: raw.pinned === true,
     dueAt: Number.isFinite(raw.dueAt) ? Number(raw.dueAt) : null,
+    doneAt: done ? (Number.isFinite(raw.doneAt) ? Number(raw.doneAt) : null) : null,
+    snoozedUntil: Number.isFinite(raw.snoozedUntil) ? Number(raw.snoozedUntil) : null,
+    nudgedAt: Number.isFinite(raw.nudgedAt) ? Number(raw.nudgedAt) : 0,
+    removedAt: Number.isFinite(raw.removedAt) ? Number(raw.removedAt) : null,
     color: ['ember', 'moss', 'sky', 'plum'].includes(raw.color) ? raw.color : null,
     source: ['pet', 'tool', 'chat', 'quick'].includes(raw.source) ? raw.source : 'pet',
     createdAt,

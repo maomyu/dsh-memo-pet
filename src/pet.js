@@ -251,10 +251,38 @@ export function statsFor(memos, now = Date.now()) {
     total: memos.length,
     open: open.length,
     done: memos.length - open.length,
+    doneToday: memos.filter(memo => memo.done && memo.doneAt && memo.doneAt >= startOfDay(now)).length,
     pinned: open.filter(memo => memo.pinned).length,
     dueToday: open.filter(memo => memo.dueAt !== null && memo.dueAt >= startOfDay(now) && memo.dueAt <= endOfDay(now)).length,
     overdue: open.filter(memo => memo.dueAt !== null && memo.dueAt < now).length,
   }
+}
+
+/** Quiet hours: [from, to) in local clock time; handles windows across midnight. */
+export const DEFAULT_QUIET = { from: 22, to: 8 }
+
+export function inQuietHours(now = Date.now(), quiet = DEFAULT_QUIET) {
+  if (!quiet) return false
+  const hour = new Date(now).getHours()
+  const { from, to } = quiet
+  if (!Number.isFinite(from) || !Number.isFinite(to) || from === to) return false
+  return from < to ? hour >= from && hour < to : hour >= from || hour < to
+}
+
+/**
+ * The one reminder the pet should deliver right now, if any.
+ * A memo is nudged once per due moment: after delivery `nudgedAt` moves past
+ * `dueAt`, and snoozing resets both so it can come back later.
+ */
+export function alertFor(memos, now = Date.now(), quiet = DEFAULT_QUIET) {
+  if (inQuietHours(now, quiet)) return null
+  const due = memos
+    .filter(memo => !memo.done && !memo.removedAt && memo.dueAt !== null)
+    .filter(memo => (memo.snoozedUntil ?? 0) <= now)
+    .filter(memo => memo.snoozedUntil ? memo.nudgedAt < memo.snoozedUntil : memo.nudgedAt < memo.dueAt)
+    .filter(memo => memo.dueAt <= now || (memo.snoozedUntil && memo.snoozedUntil <= now))
+    .sort((a, b) => (a.snoozedUntil || a.dueAt) - (b.snoozedUntil || b.dueAt))
+  return due[0] ?? null
 }
 
 export function formatDue(dueAt, now = Date.now()) {
@@ -319,6 +347,7 @@ export function suggestionsFor(memos, now = Date.now()) {
       line: `${plural(overdue.length)}已经过了时间，要挪到今天还是先放下？`,
       copy: overdue.map(memo => `- ${memoText(memo, now)}`).join('\n'),
       action: { kind: 'filter', value: 'overdue' },
+      act: { kind: 'move-today', ids: overdue.map(memo => memo.id), label: '挪到今天' },
     })
   }
   if (today.length) {

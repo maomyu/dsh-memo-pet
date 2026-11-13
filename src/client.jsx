@@ -64,6 +64,7 @@ function Stage({ request, ctx }) {
   const [error, setError] = useState('')
   const [toast, setToast] = useState(null)
   const [settings, setSettings] = useState(false)
+  const [alert, setAlert] = useState(null)
   const [search, setSearch] = useState('')
   const [busy, setBusy] = useState(false)
   const [size, setSize] = useState(PANEL_FALLBACK)
@@ -127,6 +128,23 @@ function Stage({ request, ctx }) {
   useEffect(() => {
     if (data && !petPos) setPetPos({ x: rig.rig.x, y: rig.rig.y })
   }, [data, petPos, rig])
+
+  /* reminders: ask the host every half minute; the peek card carries the nudge */
+  useEffect(() => {
+    let alive = true
+    const check = async () => {
+      try {
+        const result = await request({ op: 'alerts' })
+        if (!alive || !result?.alert) return
+        setAlert(result.alert)
+        rig.pulse('alert', 1400)
+        if (!openRef.current) setPeek(true)
+      } catch {}
+    }
+    check()
+    const timer = setInterval(check, 30_000)
+    return () => { alive = false; clearInterval(timer) }
+  }, [request, rig, openRef])
 
   useEffect(() => {
     const onResize = () => {
@@ -316,7 +334,7 @@ function Stage({ request, ctx }) {
     const result = await run('memo/remove', { id: memo.id })
     if (result) {
       rig.pulse('held', 500)
-      showToast('删掉了', { undo: { title: memo.title, dueAt: memo.dueAt, tags: memo.tags } })
+      showToast('移到回收站了，七天内都能恢复')
     }
   }, [run, rig, showToast])
 
@@ -330,8 +348,46 @@ function Stage({ request, ctx }) {
     run('memo/update', { id: memo.id, patch: { pinned: !memo.pinned } })
   }, [run])
 
-  const onEdit = useCallback((memo, title) => {
-    run('memo/update', { id: memo.id, patch: { title } })
+  const onEdit = useCallback((memo, patch) => {
+    run('memo/update', { id: memo.id, patch })
+  }, [run])
+
+  const onSchedule = useCallback((memo, text) => {
+    run('memo/schedule', { id: memo.id, text })
+  }, [run])
+
+  const onRestore = useCallback(memo => {
+    run('memo/restore', { id: memo.id })
+  }, [run])
+
+  const onPurge = useCallback(memo => {
+    run('memo/purge', { id: memo?.id ?? '' })
+  }, [run])
+
+  const onAct = useCallback(action => {
+    if (action?.kind === 'move-today') run('memo/bulk-due', { ids: action.ids, text: '今天 18:00' })
+  }, [run])
+
+  const dropAlert = useCallback(() => setAlert(null), [])
+
+  const alertDone = useCallback(memo => {
+    setAlert(null)
+    run('memo/toggle', { id: memo.id })
+  }, [run])
+
+  const alertSnooze = useCallback((memo, minutes) => {
+    setAlert(null)
+    run('memo/snooze', { id: memo.id, minutes })
+  }, [run])
+
+  const alertDismiss = useCallback(memo => {
+    setAlert(null)
+    const now = new Date()
+    const next = new Date(now)
+    next.setDate(now.getDate() + 1)
+    next.setHours(9, 0, 0, 0)
+    const minutes = Math.max(60, Math.round((next.getTime() - now.getTime()) / 60_000))
+    run('memo/snooze', { id: memo.id, minutes })
   }, [run])
 
   const onClearDone = useCallback(() => { run('memo/clear-done', {}) }, [run])
@@ -478,6 +534,14 @@ function Stage({ request, ctx }) {
                   onPin={onPin}
                   onEdit={onEdit}
                   onOpenLink={openLink}
+                  onSchedule={onSchedule}
+                  onRestore={onRestore}
+                  onPurge={onPurge}
+                  onAct={onAct}
+                  alert={alert}
+                  onAlertDone={alertDone}
+                  onAlertSnooze={alertSnooze}
+                  onAlertDismiss={alertDismiss}
                   onCopyAll={onCopyAll}
                   onClearDone={onClearDone}
                   onReset={onResetChat}
@@ -496,9 +560,13 @@ function Stage({ request, ctx }) {
               line={say || (data.lines?.[0] ?? line)}
               side={edge}
               count={stats.open}
+              alert={alert}
+              onAlertDone={alertDone}
+              onAlertSnooze={alertSnooze}
+              onAlertDismiss={alertDismiss}
               onEnter={() => setPeek(true)}
-              onLeave={() => setPeek(false)}
-              onOpen={openPanel}
+              onLeave={() => { if (!alert) setPeek(false) }}
+              onOpen={() => { setPeek(false); openPanel() }}
             />
           ) : null}
         </div>

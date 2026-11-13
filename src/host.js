@@ -10,6 +10,8 @@ import {
 } from './store.js'
 import {
   STARTERS,
+  DEFAULT_QUIET,
+  alertFor,
   detectIntent,
   exportText,
   formatDue,
@@ -60,12 +62,23 @@ export default class MemoPet extends TypertRemoteService {
     this.tool = createMemoTool(this)
     this.chat = null
     this.lastOrder = []
+    this.quietHours = config?.quietHours ?? DEFAULT_QUIET
   }
 
   async [Service.init]() {
     await this.store.load()
+    await this.purgeTrash()
     this.installTools()
     this.installPrompt()
+  }
+
+  /** Trash keeps a week; anything older is dropped on start. */
+  async purgeTrash(now = Date.now()) {
+    const cutoff = now - 7 * 86_400_000
+    if (!this.store.state.memos.some(memo => memo.removedAt && memo.removedAt <= cutoff)) return
+    await this.store.update(state => {
+      state.memos = state.memos.filter(memo => !memo.removedAt || memo.removedAt > cutoff)
+    })
   }
 
   /* -------------------------------------------------------------- agents */
@@ -113,13 +126,17 @@ export default class MemoPet extends TypertRemoteService {
 
   async snapshot(extra = {}) {
     const state = this.store.state
-    const memos = sortMemos(state.memos)
+    const memos = sortMemos(state.memos.filter(memo => !memo.removedAt))
+    const trash = state.memos
+      .filter(memo => memo.removedAt)
+      .sort((a, b) => (b.removedAt ?? 0) - (a.removedAt ?? 0))
     const now = Date.now()
     this.lastOrder = memos.map(memo => memo.id)
     return {
       now,
       pet: state.pet,
       memos,
+      trash,
       stats: statsFor(memos, now),
       suggestions: suggestionsFor(memos, now),
       lines: petLines(memos, now),
@@ -190,21 +207,57 @@ export default class MemoPet extends TypertRemoteService {
       if (typeof patch.title === 'string' && patch.title.trim()) target.title = patch.title.trim().slice(0, LIMITS.title)
       if (typeof patch.body === 'string') target.body = patch.body.slice(0, LIMITS.body)
       if (Array.isArray(patch.tags)) target.tags = cleanMemo({ ...target, tags: patch.tags }).tags
-      if (typeof patch.done === 'boolean') target.done = patch.done
+      if (typeof patch.done === 'boolean') {
+        target.done = patch.done
+        target.doneAt = patch.done ? Date.now() : null
+        if (patch.done) { target.snoozedUntil = null; target.nudgedAt = 0 }
+      }
       if (typeof patch.pinned === 'boolean') target.pinned = patch.pinned
-      if ('dueAt' in patch) target.dueAt = Number.isFinite(patch.dueAt) ? patch.dueAt : null
+      if ('dueAt' in patch) {
+        target.dueAt = Number.isFinite(patch.dueAt) ? patch.dueAt : null
+        target.nudgedAt = 0
+        target.snoozedUntil = null
+      }
       target.updatedAt = Date.now()
     })
     return this.store.state.memos.find(item => item.id === memo.id) ?? memo
   }
 
+  /** Deleting moves a memo to the week-long trash instead of destroying it. */
   async removeMemo(ref) {
     const memo = this.resolveRef(ref)
     if (!memo) throw fail('not-found', '找不到这条备忘。')
     await this.store.update(state => {
-      state.memos = state.memos.filter(item => item.id !== memo.id)
+      const target = state.memos.find(item => item.id === memo.id)
+      if (target) {
+        target.removedAt = Date.now()
+        target.snoozedUntil = null
+        target.updatedAt = Date.now()
+      }
     })
     return memo
+  }
+
+  findAny(ref) {
+    return this.store.state.memos.find(memo => memo.id === ref) ?? null
+  }
+
+  /** The reminder to surface right now, consumed so it fires only once. */
+  async takeAlert(now = Date.now()) {
+    const alert = alertFor(this.store.state.memos, now, this.quietHours)
+    if (!alert) return null
+    await this.store.update(state => {
+      const target = state.memos.find(memo => memo.id === alert.id)
+      if (target) target.nudgedAt = now
+    })
+    return {
+      id: alert.id,
+      title: alert.title,
+      body: alert.body,
+      link: alert.link,
+      dueAt: alert.dueAt,
+      snoozed: Boolean(alert.snoozedUntil),
+    }
   }
 
   /* ------------------------------------------------------------ pet chat */
@@ -355,6 +408,7 @@ export default class MemoPet extends TypertRemoteService {
       const query = String(args?.query ?? '').trim().toLowerCase()
       let memos = sortMemos(this.store.state.memos)
       if (typeof args?.done === 'boolean') memos = memos.filter(memo => memo.done === args.done)
+      memos = memos.filter(memo => !memo.removedAt)
       if (query) memos = memos.filter(memo => `${memo.title} ${memo.body} ${memo.tags.join(' ')}`.toLowerCase().includes(query))
       if (!memos.length) return '清单里还没有符合条件的备忘。'
       return memos.slice(0, 40).map((memo, index) => {
@@ -424,17 +478,85 @@ export default class MemoPet extends TypertRemoteService {
         return this.snapshot()
       }
       if (op === 'memo/clear-done') {
+        const now = Date.now()
         await this.store.update(state => {
-          state.memos = state.memos.filter(memo => !memo.done)
+          for (const memo of state.memos) {
+            if (memo.done && !memo.removedAt) {
+              memo.removedAt = now
+              memo.updatedAt = now
+            }
+          }
         })
         return this.snapshot()
       }
+      if (op === 'memo/schedule') {
+        const memo = this.resolveRef(input?.id)
+        if (!memo) throw fail('not-found', '找不到这条备忘。')
+        const text = String(input?.text ?? '').trim()
+        let dueAt = null
+        if (text) {
+          dueAt = parseDue(text)
+          if (!dueAt) throw fail('bad-time', '没认出这个时间，试试「明天 9:00」或「周五下午三点」。')
+        }
+        await this.mutate(memo.id, { dueAt })
+        return this.snapshot()
+      }
+      if (op === 'memo/snooze') {
+        const memo = this.resolveRef(input?.id)
+        if (!memo) throw fail('not-found', '找不到这条备忘。')
+        const minutes = Math.max(1, Math.min(24 * 60, Number(input?.minutes) || 10))
+        const until = Date.now() + minutes * 60_000
+        await this.store.update(state => {
+          const target = state.memos.find(item => item.id === memo.id)
+          if (!target) return
+          target.snoozedUntil = until
+          target.nudgedAt = 0
+          target.updatedAt = Date.now()
+        })
+        return this.snapshot()
+      }
+      if (op === 'memo/restore') {
+        const memo = this.findAny(String(input?.id ?? ''))
+        if (!memo) throw fail('not-found', '回收站里没有这条。')
+        await this.store.update(state => {
+          const target = state.memos.find(item => item.id === memo.id)
+          if (target) { target.removedAt = null; target.updatedAt = Date.now() }
+        })
+        return this.snapshot()
+      }
+      if (op === 'memo/purge') {
+        const id = String(input?.id ?? '')
+        await this.store.update(state => {
+          state.memos = id ? state.memos.filter(memo => memo.id !== id) : state.memos.filter(memo => !memo.removedAt)
+        })
+        return this.snapshot()
+      }
+      if (op === 'memo/bulk-due') {
+        const ids = Array.isArray(input?.ids) ? input.ids : []
+        const text = String(input?.text ?? '').trim()
+        if (!ids.length) throw fail('empty', '没有要改期的备忘。')
+        const dueAt = text ? parseDue(text) : null
+        if (text && !dueAt) throw fail('bad-time', '没认出这个时间。')
+        await this.store.update(state => {
+          const now = Date.now()
+          for (const memo of state.memos) {
+            if (!ids.includes(memo.id)) continue
+            memo.dueAt = dueAt
+            memo.nudgedAt = 0
+            memo.snoozedUntil = null
+            memo.updatedAt = now
+          }
+        })
+        return this.snapshot()
+      }
+      if (op === 'alerts') {
+        return { alert: await this.takeAlert() }
+      }
       if (op === 'memo/export') {
         const ids = Array.isArray(input?.ids) ? input.ids : []
-        const memos = ids.length
-          ? this.store.state.memos.filter(memo => ids.includes(memo.id))
-          : this.store.state.memos
-        return { text: exportText(memos.length ? memos : this.store.state.memos) }
+        const active = this.store.state.memos.filter(memo => !memo.removedAt)
+        const memos = ids.length ? active.filter(memo => ids.includes(memo.id)) : active
+        return { text: exportText(memos.length ? memos : active) }
       }
       if (op === 'suggestions') {
         const memos = sortMemos(this.store.state.memos)

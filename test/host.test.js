@@ -122,7 +122,8 @@ test('host service records, reads back and survives a restart', async () => {
     assert.equal(removed.memos.length, 0)
 
     const saved = JSON.parse(await readFile(join(dir, 'state.json'), 'utf8'))
-    assert.equal(saved.memos.length, 0)
+    assert.equal(saved.memos.length, 1, 'the deleted memo is kept in the trash')
+    assert.ok(saved.memos[0].removedAt > 0)
     const backups = (await readdir(dir)).filter(name => name.includes('broken'))
     assert.equal(backups.length, 0, 'a healthy file is never renamed')
   } finally {
@@ -209,4 +210,64 @@ test('a relative directory resolves under home, an absolute one is kept', async 
   assert.equal(registered.length, 1, 'the tool lands on every live agent once initialised')
   await rm('/tmp/memo-pet-absolute', { recursive: true, force: true })
   await rm(join(process.env.HOME, 'memo-pet-test'), { recursive: true, force: true })
+})
+
+test('a due memo is nudged once, snoozed, rescheduled and restored from trash', async () => {
+  const { MemoPet, Service } = await loadHost()
+  const dir = await mkdtemp(join(tmpdir(), 'memo-pet-remind-'))
+  try {
+    const { ctx } = makeContext()
+    const pet = new MemoPet(ctx, { directory: dir, quietHours: { from: 0, to: 0 } })
+    await pet[Service.init]()
+    const added = await pet.request({ op: 'memo/add', text: '交季度报表' })
+    const id = added.memo.id
+    await pet.request({ op: 'memo/update', id, patch: { dueAt: Date.now() - 60_000 } })
+
+    const first = await pet.request({ op: 'alerts' })
+    assert.equal(first.alert?.id, id, 'the overdue memo is surfaced')
+    assert.equal((await pet.request({ op: 'alerts' })).alert, null, 'and only once')
+
+    await pet.request({ op: 'memo/snooze', id, minutes: 10 })
+    assert.equal((await pet.request({ op: 'alerts' })).alert, null, 'snoozed memos stay quiet')
+
+    const scheduled = await pet.request({ op: 'memo/schedule', id, text: '明天 09:00' })
+    const memo = scheduled.memos.find(item => item.id === id)
+    assert.ok(memo.dueAt > Date.now(), 'the new time is in the future')
+
+    await pet.request({ op: 'memo/remove', id })
+    const trashed = await pet.request({ op: 'bootstrap' })
+    assert.equal(trashed.memos.length, 0)
+    assert.equal(trashed.trash.length, 1, 'deleting keeps it in the trash')
+
+    const restored = await pet.request({ op: 'memo/restore', id })
+    assert.equal(restored.memos.length, 1)
+    assert.equal(restored.trash.length, 0)
+
+    await pet.request({ op: 'memo/remove', id })
+    const purged = await pet.request({ op: 'memo/purge' })
+    assert.equal(purged.trash.length, 0, 'purge empties the trash')
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('bulk rescheduling moves several memos at once', async () => {
+  const { MemoPet, Service } = await loadHost()
+  const dir = await mkdtemp(join(tmpdir(), 'memo-pet-bulk-'))
+  try {
+    const { ctx } = makeContext()
+    const pet = new MemoPet(ctx, { directory: dir, quietHours: { from: 0, to: 0 } })
+    await pet[Service.init]()
+    const a = await pet.request({ op: 'memo/add', text: '甲' })
+    const b = await pet.request({ op: 'memo/add', text: '乙' })
+    await pet.request({ op: 'memo/update', id: a.memo.id, patch: { dueAt: Date.now() - 3_600_000 } })
+    const moved = await pet.request({
+      op: 'memo/bulk-due',
+      ids: [a.memo.id, b.memo.id],
+      text: '明天 18:00',
+    })
+    for (const memo of moved.memos) assert.ok(memo.dueAt > Date.now(), `${memo.title} moved`)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
 })

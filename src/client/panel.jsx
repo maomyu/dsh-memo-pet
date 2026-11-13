@@ -26,23 +26,41 @@ function CreatureMark() {
 
 /* ------------------------------------------------------------------- rows */
 
-function MemoRow({ memo, now, onToggle, onRemove, onPin, onEdit, onOpenLink, busy }) {
+function MemoRow({
+  memo, now, mode = 'open', onToggle, onRemove, onPin, onEdit, onSchedule,
+  onRestore, onPurge, onOpenLink, busy,
+}) {
   const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState(memo.title)
+  const [title, setTitle] = useState(memo.title)
+  const [body, setBody] = useState(memo.body ?? '')
+  const [sched, setSched] = useState(false)
+  const [schedText, setSchedText] = useState('')
   const input = useRef(null)
+
   useEffect(() => {
-    if (editing) {
-      const node = input.current
-      node?.focus()
-      node?.setSelectionRange(node.value.length, node.value.length)
-    }
+    if (!editing) return
+    const node = input.current
+    node?.focus()
+    node?.setSelectionRange(node.value.length, node.value.length)
   }, [editing])
+
+  useEffect(() => {
+    setTitle(memo.title)
+    setBody(memo.body ?? '')
+  }, [memo.id, memo.title, memo.body])
+
   const commit = useCallback(() => {
-    const text = draft.trim()
+    const next = title.trim()
+    if (!next) { setTitle(memo.title); setEditing(false); return }
     setEditing(false)
-    if (text && text !== memo.title) onEdit(memo, text)
-    else setDraft(memo.title)
-  }, [draft, memo, onEdit])
+    if (next !== memo.title || body !== (memo.body ?? '')) onEdit(memo, { title: next, body })
+  }, [title, body, memo, onEdit])
+
+  const pick = useCallback(text => {
+    setSched(false)
+    setSchedText('')
+    onSchedule(memo, text)
+  }, [memo, onSchedule])
 
   const overdue = !memo.done && memo.dueAt && memo.dueAt < now - 60_000
   const due = memo.dueAt ? dueLabel(memo.dueAt, now) : ''
@@ -50,7 +68,7 @@ function MemoRow({ memo, now, onToggle, onRemove, onPin, onEdit, onOpenLink, bus
 
   return (
     <li className={`mp-row ${memo.done ? 'is-done' : ''} ${memo.pinned ? 'is-pinned' : ''}`} data-id={memo.id}>
-      {editing ? null : (
+      {editing || mode === 'trash' ? null : (
         <button
           type="button"
           className="mp-check"
@@ -65,65 +83,128 @@ function MemoRow({ memo, now, onToggle, onRemove, onPin, onEdit, onOpenLink, bus
       )}
       <div className="mp-row-main">
         {editing ? (
-          <input
-            ref={input}
-            className="mp-row-edit"
-            value={draft}
-            onChange={event => setDraft(event.target.value)}
-            onBlur={commit}
-            onKeyDown={event => {
-              if (event.key === 'Enter') { event.preventDefault(); commit() }
-              if (event.key === 'Escape') { setDraft(memo.title); setEditing(false) }
-            }}
-          />
+          <form
+            className="mp-edit"
+            onSubmit={event => { event.preventDefault(); commit() }}
+            onKeyDown={event => { if (event.key === 'Escape') { setTitle(memo.title); setBody(memo.body ?? ''); setEditing(false) } }}
+          >
+            <input
+              ref={input}
+              className="mp-row-edit"
+              value={title}
+              maxLength={160}
+              onChange={event => setTitle(event.target.value)}
+            />
+            <textarea
+              className="mp-row-body"
+              rows={2}
+              value={body}
+              maxLength={4000}
+              placeholder="补一句正文，可留空"
+              onChange={event => setBody(event.target.value)}
+            />
+            <div className="mp-edit-actions">
+              <button type="submit" className="mp-mini">保存</button>
+              <button type="button" className="mp-mini mp-mini-quiet" onClick={() => { setTitle(memo.title); setBody(memo.body ?? ''); setEditing(false) }}>取消</button>
+            </div>
+          </form>
         ) : (
           <div
             className="mp-row-title"
             onDoubleClick={() => setEditing(true)}
-            title={`${memo.body ? memo.body + ' · ' : ''}双击改标题`}
+            title={`${memo.body ? memo.body + ' · ' : ''}双击改标题和正文`}
           >
             <LinkText text={memo.title} onOpen={onOpenLink} />
           </div>
         )}
-        <div className="mp-row-meta">
-          {due ? <span className={`mp-chip ${overdue ? 'is-alert' : ''}`}><Icon name="clock" size={11} />{due}</span> : null}
-          {memo.tags.map(tag => <span key={tag} className="mp-tag">#{tag}</span>)}
-          {memo.link ? (
-            <a
-              className="mp-link"
-              href={memo.link}
-              target="_blank"
-              rel="noreferrer"
-              title={`在右侧栏打开 ${memo.link}`}
-              onClick={event => { event.preventDefault(); event.stopPropagation(); onOpenLink(memo.link) }}
-            >
-              <Icon name="link" size={11} />
-              {linkHost(memo.link) || '链接'}
-            </a>
-          ) : null}
-          {!due && !memo.tags.length ? <span className="mp-meta">{relativeDay(memo.createdAt, now)}</span> : null}
-        </div>
+        {!editing && mode !== 'trash' ? (
+          <div className="mp-row-meta">
+            {due ? (mode === 'open' ? (
+              <button
+                type="button"
+                className={`mp-chip mp-chip-btn ${overdue ? 'is-alert' : ''}`}
+                onClick={() => { setSched(value => !value); setSchedText('') }}
+                title="改时间"
+              >
+                <Icon name="clock" size={11} />{due}
+              </button>
+            ) : (
+              <span className={`mp-chip ${overdue ? 'is-alert' : ''}`}><Icon name="clock" size={11} />{due}</span>
+            )) : null}
+            {memo.tags.map(tag => <span key={tag} className="mp-tag">#{tag}</span>)}
+            {memo.link ? (
+              <a
+                className="mp-link"
+                href={memo.link}
+                target="_blank"
+                rel="noreferrer"
+                title={`在右侧栏打开 ${memo.link}`}
+                onClick={event => { event.preventDefault(); event.stopPropagation(); onOpenLink(memo.link) }}
+              >
+                <Icon name="link" size={11} />
+                {linkHost(memo.link) || '链接'}
+              </a>
+            ) : null}
+            {!due && !memo.tags.length && !memo.link ? <span className="mp-meta">{relativeDay(memo.createdAt, now)}</span> : null}
+          </div>
+        ) : null}
+        {sched ? (
+          <form className="mp-sched" onSubmit={event => { event.preventDefault(); if (schedText.trim()) pick(schedText.trim()) }}>
+            <input
+              autoFocus
+              className="mp-sched-input"
+              value={schedText}
+              placeholder="明天 9:00 / 周五下午三点"
+              onChange={event => setSchedText(event.target.value)}
+            />
+            <div className="mp-sched-quick">
+              <button type="button" onClick={() => pick('今天 18:00')}>今天</button>
+              <button type="button" onClick={() => pick('明天 09:00')}>明天</button>
+              <button type="button" onClick={() => pick('下周一 09:00')}>下周一</button>
+              <button type="button" onClick={() => pick('')}>清空</button>
+            </div>
+          </form>
+        ) : null}
       </div>
       <div className="mp-row-actions">
-        <CopyButton text={copyValue} iconOnly label="复制这条" />
-        <button
-          type="button"
-          className={`mp-icon ${memo.pinned ? 'is-on' : ''}`}
-          onClick={() => onPin(memo)}
-          aria-label={memo.pinned ? '取消钉住' : '钉住'}
-          title={memo.pinned ? '取消钉住' : '钉住'}
-        >
-          <Icon name="pin" size={13} />
-        </button>
-        <button
-          type="button"
-          className="mp-icon mp-icon-danger"
-          onClick={() => onRemove(memo)}
-          aria-label="删除这条"
-          title="删除这条"
-        >
-          <Icon name="trash" size={13} />
-        </button>
+        {mode === 'trash' ? (
+          <>
+            <button type="button" className="mp-text-btn" onClick={() => onRestore(memo)}>恢复</button>
+            <button
+              type="button"
+              className="mp-icon mp-icon-danger"
+              onClick={() => onPurge(memo)}
+              aria-label="彻底删除"
+              title="彻底删除"
+            >
+              <Icon name="trash" size={13} />
+            </button>
+          </>
+        ) : (
+          <>
+            <CopyButton text={copyValue} iconOnly label="复制这条" />
+            {mode === 'open' ? (
+              <button
+                type="button"
+                className={`mp-icon ${memo.pinned ? 'is-on' : ''}`}
+                onClick={() => onPin(memo)}
+                aria-label={memo.pinned ? '取消钉住' : '钉住'}
+                title={memo.pinned ? '取消钉住' : '钉住'}
+              >
+                <Icon name="pin" size={13} />
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className="mp-icon mp-icon-danger"
+              onClick={() => onRemove(memo)}
+              aria-label={mode === 'done' ? '从已完成里移除' : '移到回收站'}
+              title={mode === 'done' ? '从已完成里移除' : '移到回收站'}
+            >
+              <Icon name="trash" size={13} />
+            </button>
+          </>
+        )}
       </div>
     </li>
   )
@@ -177,7 +258,7 @@ function Composer({ draft, setDraft, onSend, busy, placeholder, hint }) {
  * One opinion at a time, cycling on demand. A strip reads faster than a stack
  * of cards and gives the pet a way to "offer another thought".
  */
-function Opinion({ items, now }) {
+function Opinion({ items, now, onAct }) {
   const [index, setIndex] = useState(0)
   useEffect(() => { if (index >= items.length) setIndex(0) }, [items.length, index])
   if (!items.length) return null
@@ -190,6 +271,9 @@ function Opinion({ items, now }) {
         <p>{item.line}</p>
       </div>
       <div className="mp-op-actions">
+        {item.act ? (
+          <button type="button" className="mp-op-do" onClick={() => onAct?.(item.act)}>{item.act.label}</button>
+        ) : null}
         <CopyButton text={item.copy} label="复制" doneLabel="已复制" />
         {items.length > 1 ? (
           <button
@@ -213,15 +297,20 @@ export function Panel({
   data, placement, line, thinking, suggestions, busy, error,
   draft, setDraft, onSend, onClose, onToggle, onRemove, onPin, onEdit, onOpenLink,
   onCopyAll, onClearDone, onReset, search, setSearch, onSettings,
+  onSchedule, onRestore, onPurge, onAct,
+  alert, onAlertDone, onAlertSnooze, onAlertDismiss,
 }) {
   const now = data.now ?? Date.now()
   const memos = data.memos ?? []
   const open = memos.filter(memo => !memo.done)
   const done = memos.filter(memo => memo.done)
+  const trash = data.trash ?? []
+  const [view, setView] = useState('open')
+  const pool = view === 'trash' ? trash : view === 'done' ? done : open
   const term = search.trim().toLowerCase()
   const shown = (term
-    ? memos.filter(memo => `${memo.title} ${memo.body} ${memo.tags.join(' ')}`.toLowerCase().includes(term))
-    : memos)
+    ? pool.filter(memo => `${memo.title} ${memo.body} ${memo.tags.join(' ')}`.toLowerCase().includes(term))
+    : pool)
   const [searching, setSearching] = useState(false)
   const searchRef = useRef(null)
   useEffect(() => { if (searching) searchRef.current?.focus() }, [searching])
@@ -293,17 +382,47 @@ export function Panel({
 
       {error ? <p className="mp-error" role="status">{error}</p> : null}
 
+      {alert ? (
+        <div className="mp-alert" role="status">
+          <span className="mp-alert-dot" aria-hidden="true" />
+          <div className="mp-alert-body">
+            <b>{alert.title}</b>
+            <small>{dueLabel(alert.dueAt, now)} 到点了</small>
+          </div>
+          <button type="button" className="mp-alert-do" onClick={() => onAlertDone(alert)}>完成</button>
+          <button type="button" className="mp-alert-later" onClick={() => onAlertSnooze(alert, 10)}>10 分钟</button>
+          <button type="button" className="mp-alert-close" onClick={() => onAlertDismiss(alert)} aria-label="今天不提醒">
+            <Icon name="close" size={12} />
+          </button>
+        </div>
+      ) : null}
+
+      <div className="mp-views" role="tablist" aria-label="清单视图">
+        {[['open', '待办', open.length], ['done', '完成', done.length], ['trash', '回收站', trash.length]].map(([key, label, count]) => (
+          <button
+            key={key}
+            type="button"
+            role="tab"
+            aria-selected={view === key}
+            data-on={view === key}
+            onClick={() => setView(key)}
+          >
+            {label}<b>{count}</b>
+          </button>
+        ))}
+      </div>
+
       <div className="mp-list-head">
-        <span>{term ? `搜索「${search.trim()}」` : '清单'}</span>
-        <span className="mp-list-count">{term ? `${shown.length} 条结果` : `${open.length} 条`}</span>
+        <span>{term ? `搜索「${search.trim()}」` : view === 'trash' ? '回收站 · 保留 7 天' : view === 'done' ? '已完成' : '清单'}</span>
+        <span className="mp-list-count">{term ? `${shown.length} 条结果` : `${pool.length} 条`}</span>
       </div>
 
       <ul className="mp-list">
         {shown.length === 0 ? (
           <li className="mp-empty">
             <div className="mp-empty-art" aria-hidden="true"><span /><span /></div>
-            <p>{term ? '没搜到。换个词试试？' : '还没有备忘。说一句，我替你记着。'}</p>
-            {!term ? (
+            <p>{term ? '没搜到。换个词试试？' : view === 'trash' ? '回收站是空的。删掉的备忘会在这里留七天。' : view === 'done' ? '还没有做完的。勾掉一条，它就来这里。' : '还没有备忘。说一句，我替你记着。'}</p>
+            {!term && view === 'open' ? (
               <div className="mp-starters">
                 {(data.starters ?? []).slice(0, 3).map(text => (
                   <button key={text} type="button" onClick={() => setDraft(text)}>
@@ -318,11 +437,15 @@ export function Panel({
             key={memo.id}
             memo={memo}
             now={now}
+            mode={view}
             busy={busy}
             onToggle={onToggle}
             onRemove={onRemove}
             onPin={onPin}
             onEdit={onEdit}
+            onSchedule={onSchedule}
+            onRestore={onRestore}
+            onPurge={onPurge}
             onOpenLink={onOpenLink}
           />
         ))}
@@ -333,9 +456,14 @@ export function Panel({
           <button type="button" className="mp-text-btn" onClick={onCopyAll}>
             <Icon name="copy" size={12} />复制清单
           </button>
-          {done.length ? (
+          {view === 'open' && done.length ? (
             <button type="button" className="mp-text-btn" onClick={onClearDone}>
-              清掉已完成 {done.length}
+              归档已完成 {done.length}
+            </button>
+          ) : null}
+          {view === 'trash' && trash.length ? (
+            <button type="button" className="mp-text-btn" onClick={() => onPurge(null)}>
+              清空回收站
             </button>
           ) : null}
         </div>
@@ -350,7 +478,26 @@ export function Panel({
 
 /* ------------------------------------------------------------- peek bubble */
 
-export function Peek({ line, side, onEnter, onLeave, onOpen, count }) {
+export function Peek({
+  line, side, onEnter, onLeave, onOpen, count,
+  alert, onAlertDone, onAlertSnooze, onAlertDismiss,
+}) {
+  if (alert) {
+    return (
+      <div className="mp-peek mp-peek-alert" data-side={side} onPointerEnter={onEnter} onPointerLeave={() => {}}>
+        <span className="mp-peek-label">到点了</span>
+        <p className="mp-peek-line">{alert.title}</p>
+        <div className="mp-peek-foot">
+          <button type="button" className="mp-peek-do" onClick={() => onAlertDone(alert)}>完成</button>
+          <button type="button" className="mp-peek-snooze" onClick={() => onAlertSnooze(alert, 10)}>10 分钟</button>
+          <button type="button" className="mp-peek-dismiss" onClick={() => onAlertDismiss(alert)} aria-label="今天不提醒">
+            <Icon name="close" size={12} />
+          </button>
+        </div>
+        <span className="mp-peek-tail" aria-hidden="true" />
+      </div>
+    )
+  }
   return (
     <div
       className="mp-peek"

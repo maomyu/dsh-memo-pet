@@ -80,9 +80,12 @@ export function cleanMemo(raw, now = Date.now()) {
   const title = cleanString(raw.title, LIMITS.title).trim()
   if (!title) return null
   const createdAt = Number.isFinite(raw.createdAt) ? Number(raw.createdAt) : now
+  const rawLink = typeof raw.link === 'string' ? raw.link.trim() : ''
+  const link = /^https?:\/\//i.test(rawLink) ? rawLink.slice(0, 2048) : ''
   return {
     id,
     title,
+    link,
     body: cleanString(raw.body, LIMITS.body),
     tags: cleanTags(raw.tags),
     done: raw.done === true,

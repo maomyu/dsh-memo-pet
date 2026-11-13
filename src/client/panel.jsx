@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { CopyButton, Icon, relativeDay } from './shared.jsx'
+import { CopyButton, Icon, LinkText, linkHost, relativeDay } from './shared.jsx'
 
 function dueLabel(dueAt, now) {
   if (!dueAt) return ''
@@ -26,7 +26,7 @@ function CreatureMark() {
 
 /* ------------------------------------------------------------------- rows */
 
-function MemoRow({ memo, now, onToggle, onRemove, onPin, onEdit, busy }) {
+function MemoRow({ memo, now, onToggle, onRemove, onPin, onEdit, onOpenLink, busy }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(memo.title)
   const input = useRef(null)
@@ -46,7 +46,7 @@ function MemoRow({ memo, now, onToggle, onRemove, onPin, onEdit, busy }) {
 
   const overdue = !memo.done && memo.dueAt && memo.dueAt < now - 60_000
   const due = memo.dueAt ? dueLabel(memo.dueAt, now) : ''
-  const copyValue = [memo.title, memo.body, due, memo.tags.map(tag => `#${tag}`).join(' ')].filter(Boolean).join(' · ')
+  const copyValue = [memo.title, memo.body, due, memo.tags.map(tag => `#${tag}`).join(' '), memo.link].filter(Boolean).join(' · ')
 
   return (
     <li className={`mp-row ${memo.done ? 'is-done' : ''} ${memo.pinned ? 'is-pinned' : ''}`} data-id={memo.id}>
@@ -77,18 +77,30 @@ function MemoRow({ memo, now, onToggle, onRemove, onPin, onEdit, busy }) {
             }}
           />
         ) : (
-          <button
-            type="button"
+          <div
             className="mp-row-title"
             onDoubleClick={() => setEditing(true)}
             title={`${memo.body ? memo.body + ' · ' : ''}双击改标题`}
           >
-            <span className="mp-row-text">{memo.title}</span>
-          </button>
+            <LinkText text={memo.title} onOpen={onOpenLink} />
+          </div>
         )}
         <div className="mp-row-meta">
           {due ? <span className={`mp-chip ${overdue ? 'is-alert' : ''}`}><Icon name="clock" size={11} />{due}</span> : null}
           {memo.tags.map(tag => <span key={tag} className="mp-tag">#{tag}</span>)}
+          {memo.link ? (
+            <a
+              className="mp-link"
+              href={memo.link}
+              target="_blank"
+              rel="noreferrer"
+              title={`在右侧栏打开 ${memo.link}`}
+              onClick={event => { event.preventDefault(); event.stopPropagation(); onOpenLink(memo.link) }}
+            >
+              <Icon name="link" size={11} />
+              {linkHost(memo.link) || '链接'}
+            </a>
+          ) : null}
           {!due && !memo.tags.length ? <span className="mp-meta">{relativeDay(memo.createdAt, now)}</span> : null}
         </div>
       </div>
@@ -199,7 +211,7 @@ function Opinion({ items, now }) {
 
 export function Panel({
   data, placement, line, thinking, suggestions, busy, error,
-  draft, setDraft, onSend, onClose, onToggle, onRemove, onPin, onEdit,
+  draft, setDraft, onSend, onClose, onToggle, onRemove, onPin, onEdit, onOpenLink,
   onCopyAll, onClearDone, onReset, search, setSearch, onSettings,
 }) {
   const now = data.now ?? Date.now()
@@ -264,7 +276,7 @@ export function Panel({
         {thinking ? (
           <span className="mp-typing" aria-label="正在想"><i /><i /><i /></span>
         ) : (
-          <p className="mp-line">{line}</p>
+          <p className="mp-line"><LinkText text={line} onOpen={onOpenLink} className="mp-line-text" /></p>
         )}
       </div>
 
@@ -311,6 +323,7 @@ export function Panel({
             onRemove={onRemove}
             onPin={onPin}
             onEdit={onEdit}
+            onOpenLink={onOpenLink}
           />
         ))}
       </ul>

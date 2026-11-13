@@ -153,6 +153,7 @@ export default class MemoPet extends TypertRemoteService {
       id: `m_${now.toString(36)}_${randomUUID().slice(0, 6)}`,
       title,
       body: parsed.body,
+      link: parsed.link || (typeof input?.link === 'string' ? input.link : ''),
       tags,
       dueAt: input?.dueAt === null ? null : (Number.isFinite(input?.dueAt) ? input.dueAt : parsed.dueAt),
       source: input?.source === 'tool' ? 'tool' : 'pet',
@@ -361,7 +362,8 @@ export default class MemoPet extends TypertRemoteService {
         const due = memo.dueAt ? ` · ${formatDue(memo.dueAt)}` : ''
         const tags = memo.tags.length ? ` · ${memo.tags.map(tag => `#${tag}`).join(' ')}` : ''
         const pin = memo.pinned ? ' · 钉住' : ''
-        return `${index + 1}. ${mark} ${memo.title}${due}${tags}${pin}\n   id: ${memo.id}`
+        const link = memo.link ? `\n   链接: ${memo.link}` : ''
+        return `${index + 1}. ${mark} ${memo.title}${due}${tags}${pin}${link}\n   id: ${memo.id}`
       }).join('\n')
     }
     if (op === 'add') {

@@ -11,7 +11,7 @@ const MEMO_CUE = /^(请|帮我|麻烦)?\s*(记一下|记下来|记下|记一笔|
 const ASK_CUE = /^(怎么|怎样|如何|为什么|为啥|能不能|可不可以|可以吗|要不要|该不该|帮我(想|看|分析|整理|总结|写|规划|判断)|建议|推荐|分析|总结|整理一下|看看|你觉得|有没有|是不是)/i
 const QUESTION_TAIL = /[?？]\s*$/
 const TAG = /#([\p{Script=Han}\p{L}\p{N}_-]{1,20})/gu
-const URL = /https?:\/\/[^\s，。；、）)]+/u
+const URL_PATTERN = /https?:\/\/[^\s<>"'`，。；、）)】》]+/iu
 const SENTENCE_END = /[。；;！!？?\n]/
 const CLAUSE = /[，,、]/
 
@@ -34,6 +34,35 @@ export function readNumber(raw) {
 }
 
 const pad = value => String(value).padStart(2, '0')
+
+/** Canonical http(s) URL, or '' for anything else. */
+export function safeLink(value) {
+  const text = String(value ?? '').trim()
+  if (!text || text.length > 2048) return ''
+  if (!/^https?:\/\//i.test(text)) return ''
+  try {
+    const url = new URL(text)
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return ''
+    return url.href
+  } catch {
+    return ''
+  }
+}
+
+/** Read the first link out of a sentence and hand back the sentence without it. */
+export function extractLink(text) {
+  const raw = String(text ?? '')
+  const match = raw.match(URL_PATTERN)
+  if (!match) return { text: raw, link: '' }
+  const cleaned = match[0].replace(/[.,;:!?]+$/u, '').replace(/[)\]】》]+$/u, '')
+  const link = safeLink(cleaned)
+  const rest = raw.replace(match[0], ' ').replace(/\s{2,}/g, ' ').trim()
+  return { text: rest, link }
+}
+
+export function linkHost(link) {
+  try { return new URL(String(link)).host.replace(/^www\./i, '') } catch { return '' }
+}
 
 export function startOfDay(timestamp) {
   const date = new Date(timestamp)
@@ -176,20 +205,22 @@ export function parseMemo(text, now = Date.now()) {
   const raw = String(text ?? '').trim().slice(0, 4000)
   if (!raw) return null
   const withoutCue = raw.replace(MEMO_CUE, '').trim() || raw
-  const dueAt = parseDue(withoutCue, now)
-  const tagSplit = splitTags(withoutCue)
+  const extracted = extractLink(withoutCue)
+  const source = extracted.text
+  const dueAt = parseDue(source, now)
+  const tagSplit = splitTags(source)
   const dated = dueAt ? stripDue(tagSplit.text) : tagSplit.text
   const tidy = dated.replace(/\s{2,}/g, ' ').replace(/^[，,、：:；;\s]+/, '').trim()
   const { title, body } = splitTitle(tidy)
-  if (!title) return null
-  const url = raw.match(URL)?.[0] ?? ''
+  const fallback = extracted.link ? (linkHost(extracted.link) || extracted.link) : ''
+  if (!title && !fallback) return null
   return {
-    title,
+    title: title || fallback,
     body,
     tags: tagSplit.tags.slice(0, 6),
     dueAt,
     source: 'pet',
-    link: url,
+    link: extracted.link,
   }
 }
 
@@ -242,6 +273,7 @@ export function formatDue(dueAt, now = Date.now()) {
 export function memoText(memo, now = Date.now()) {
   const parts = [memo.title]
   if (memo.body) parts.push(memo.body)
+  if (memo.link) parts.push(memo.link)
   if (memo.dueAt) parts.push(formatDue(memo.dueAt, now))
   if (memo.tags.length) parts.push(memo.tags.map(tag => `#${tag}`).join(' '))
   return parts.join(' · ')

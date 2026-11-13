@@ -52,7 +52,7 @@ function createClient(scope) {
 
 /* -------------------------------------------------------------------- stage */
 
-function Stage({ request }) {
+function Stage({ request, ctx }) {
   const [data, setData] = useState(null)
   const [open, setOpen] = useState(false)
   const [peek, setPeek] = useState(false)
@@ -68,6 +68,25 @@ function Stage({ request }) {
   const [busy, setBusy] = useState(false)
   const [size, setSize] = useState(PANEL_FALLBACK)
   const [vie, setVie] = useState(() => viewport())
+  const openLink = useCallback(url => {
+    const target = String(url ?? '')
+    if (!/^https?:\/\//i.test(target)) return
+    const sidebar = ctx?.get?.('sidebarRight')
+    const tabs = ctx?.get?.('sidebarRightTabs')
+    if (sidebar?.openTab && (typeof tabs?.get !== 'function' || tabs.get('browser'))) {
+      try {
+        sidebar.openTab('browser', { params: { url: target } })
+        // The panel floats above the right column; fold it so the new tab is visible.
+        setOpen(false)
+        return
+      } catch (error) {
+        console.error('MEMO_PET_LINK_TAB_FAILED', error)
+      }
+    }
+    try { window.open(target, '_blank', 'noopener,noreferrer') } catch (error) {
+      console.error('MEMO_PET_LINK_OPEN_FAILED', error)
+    }
+  }, [ctx])
 
   const shell = useRef(null)
   const toastTimer = useRef(0)
@@ -458,6 +477,7 @@ function Stage({ request }) {
                   onRemove={onRemove}
                   onPin={onPin}
                   onEdit={onEdit}
+                  onOpenLink={openLink}
                   onCopyAll={onCopyAll}
                   onClearDone={onClearDone}
                   onReset={onResetChat}
@@ -525,7 +545,7 @@ async function install(ctx) {
       name: 'shell.overlay',
       id: 'memo-pet',
       order: 70,
-    }, () => <Stage request={request} />)), 'memo-pet: overlay')
+    }, () => <Stage request={request} ctx={scoped} />)), 'memo-pet: overlay')
   })
   try {
     await mounted

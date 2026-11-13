@@ -33,6 +33,8 @@ export function Icon({ name, size = 15, ...rest }) {
       return <svg {...common}><path d="m12.4 4.6 3 3L8 15H5v-3z" /></svg>
     case 'arrow':
       return <svg {...common}><path d="M7 4.8 12.2 10 7 15.2" /></svg>
+    case 'link':
+      return <svg {...common}><path d="M8.4 11.6a3 3 0 0 0 4.2 0l2.2-2.2a3 3 0 0 0-4.2-4.2l-1.1 1.1" /><path d="M11.6 8.4a3 3 0 0 0-4.2 0L5.2 10.6a3 3 0 0 0 4.2 4.2l1.1-1.1" /></svg>
     default:
       return <svg {...common}><circle cx="10" cy="10" r="6" /></svg>
   }
@@ -119,4 +121,39 @@ export function useLatest(value) {
   const ref = useRef(value)
   ref.current = value
   return ref
+}
+
+/* ------------------------------------------------------------------ links */
+
+const INLINE_URL = /https?:\/\/[^\s<>"'`，。；、）)】》]+/gi
+
+const linkHost = link => {
+  try { return new URL(String(link)).host.replace(/^www\./i, '') } catch { return '' }
+}
+
+export { linkHost }
+
+/** Text with bare URLs turned into links that stay inside the app. */
+export function LinkText({ text, onOpen, className = 'mp-row-text' }) {
+  const value = String(text ?? '')
+  const parts = []
+  let last = 0
+  for (const match of value.matchAll(INLINE_URL)) {
+    const at = match.index ?? 0
+    const url = match[0].replace(/[.,;:!?]+$/u, '').replace(/[)\]】》]+$/u, '')
+    if (at > last) parts.push(value.slice(last, at))
+    parts.push(
+      <a
+        key={`l${at}`}
+        className="mp-inline-link"
+        href={url}
+        target="_blank"
+        rel="noreferrer"
+        onClick={event => { event.preventDefault(); event.stopPropagation(); onOpen?.(url) }}
+      >{url.replace(/^https?:\/\//i, '')}</a>,
+    )
+    last = at + match[0].length
+  }
+  if (last < value.length) parts.push(value.slice(last))
+  return <span className={className}>{parts.length ? parts : value}</span>
 }

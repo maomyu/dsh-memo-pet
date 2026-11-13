@@ -5,6 +5,7 @@ import {
   endOfDay,
   exportText,
   formatDue,
+  memoText,
   parseDue,
   parseMemo,
   petLines,
@@ -190,4 +191,28 @@ test('cleanState repairs a file that was hand-edited or corrupted', () => {
   assert.equal(state.pet.edge, 'right')
   assert.equal(state.chat.sessionId, '')
   assert.equal(cleanState(null).memos.length, 0)
+})
+
+test('links are lifted out of the sentence and kept on the memo', () => {
+  const now = Date.now()
+  const memo = parseMemo('把方案发出去 https://www.notion.so/team/plan-v3 。', now)
+  assert.equal(memo.title, '把方案发出去')
+  assert.equal(memo.link, 'https://www.notion.so/team/plan-v3')
+  assert.equal(memoText(memo).includes('https://www.notion.so/team/plan-v3'), true)
+})
+
+test('a bare link becomes a memo named after its host', () => {
+  const memo = parseMemo('https://github.com/maomyu/dsh-memo-pet', Date.now())
+  assert.equal(memo.title, 'github.com')
+  assert.equal(memo.link, 'https://github.com/maomyu/dsh-memo-pet')
+})
+
+test('only http(s) links are accepted, other schemes stay as text', () => {
+  const script = parseMemo('javascript:alert(1) 别点', Date.now())
+  assert.equal(script.link, '')
+  assert.match(script.title, /javascript/)
+  const stored = cleanMemo({ title: '坏链接', link: 'javascript:alert(1)' }, Date.now())
+  assert.equal(stored.link, '')
+  const good = cleanMemo({ title: '好链接', link: 'https://example.com/x' }, Date.now())
+  assert.equal(good.link, 'https://example.com/x')
 })

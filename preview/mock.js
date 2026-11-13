@@ -38,10 +38,10 @@ function seed() {
   })
   return [
     memo('m1', '把发票寄给财务', { dueAt: at(-1, 17, 30), tags: ['工作'], createdAt: now - 30 * HOUR }),
-    memo('m2', '周三前把方案发出去', { dueAt: at(5, 18), tags: ['工作'], pinned: true, createdAt: now - 5 * HOUR }),
+    memo('m2', '周三前把方案发出去', { dueAt: at(5, 18), tags: ['工作'], pinned: true, createdAt: now - 5 * HOUR, link: 'https://www.notion.so/team/plan-v3' }),
     memo('m3', '给阿岚回邮件，问清预算口径', { dueAt: at(0, 19), createdAt: now - 3 * HOUR }),
     memo('m4', '牙医 · 下午三点', { dueAt: at(1, 15), tags: ['生活'], createdAt: now - 26 * HOUR }),
-    memo('m5', '读完《技术的本质》第三章', { tags: ['阅读'], createdAt: now - 12 * DAY }),
+    memo('m5', '读完《技术的本质》第三章', { tags: ['阅读'], createdAt: now - 12 * DAY, link: 'https://book.douban.com/subject/25898809/' }),
     memo('m6', '想一个更轻的 onboarding 第一屏', { tags: ['想法'], createdAt: now - 8 * HOUR }),
     memo('m7', '订周五的会议室', { done: true, tags: ['工作'], createdAt: now - 28 * HOUR }),
   ]

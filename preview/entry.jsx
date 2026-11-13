@@ -9,7 +9,17 @@ const mode = params.get('mode') ?? 'open'
 const mock = createMock({ empty: mode === 'empty' })
 let Overlay = null
 
+const opened = []
 const ctx = {
+  get(name) {
+    if (name === 'sidebarRight') {
+      return {
+        openTab(kind, options) { opened.push({ kind, url: options?.params?.url }) },
+      }
+    }
+    if (name === 'sidebarRightTabs') return { get: id => (id === 'browser' ? {} : undefined) }
+    return undefined
+  },
   effect(fn) {
     const dispose = fn()
     return () => { if (typeof dispose === 'function') dispose() }
@@ -86,6 +96,14 @@ if (mode === 'empty') {
   await wait(360)
   document.querySelector('.mp-grab')?.click()
 }
+if (mode === 'link') {
+  await wait(360)
+  document.querySelector('.mp-grab')?.click()
+  await wait(600)
+  document.querySelector('.mp-link')?.click()
+  await wait(300)
+  document.body.dataset.opened = JSON.stringify(opened)
+}
 
 await wait(400)
 const rect = selector => {
@@ -108,5 +126,7 @@ document.body.dataset.probe = JSON.stringify({
   viewportWidth: window.visualViewport?.width,
   float: rect('.mp-float'),
   pet: rect('.mp-creature'),
+  link: rect('.mp-link'),
+  opened,
 })
 window.__ready = true

@@ -1,0 +1,6 @@
+node_modules/
+*.tgz
+.build/
+preview/bundle.js
+preview/index.html
+.DS_Store

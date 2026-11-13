@@ -1,0 +1,7 @@
+# 备忘精灵的默认配置层。
+# directory：备忘、宠物状态与对话索引的存储目录（不写用户工作区）。
+- insert:
+    - id: memo-pet
+      name: dsh-memo-pet
+      config:
+        directory: !!js dshHomePath('memo-pet')

@@ -1,0 +1,75 @@
+{
+  "name": "dsh-memo-pet",
+  "version": "0.1.1",
+  "description": "备忘精灵 · 住在 DSH 里的对话式备忘宠物，会自己藏起来，也会冒出来提醒你",
+  "type": "module",
+  "main": "./src/host.js",
+  "exports": {
+    ".": "./src/host.js",
+    "./client": "./dist/client.js",
+    "./typert": "./src/typert.js",
+    "./icon": "./icon.svg",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src",
+    "dist",
+    "locale",
+    "cordis.patch.yml",
+    "icon.svg",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "dsh": "0.2.2-rc.2",
+    "node": ">=22.15.0"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-layout",
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-ui-workspace"
+      ]
+    }
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "check": "node --check src/host.js && node --check src/store.js && node --check src/pet.js && node --check src/tools.js && node --check src/typert.js && node scripts/check-dist.mjs",
+    "test": "node --test test/*.test.js",
+    "preview": "node scripts/preview.mjs",
+    "prepack": "npm run build",
+    "shots": "node scripts/shots.mjs"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "4.1.0",
+    "@deepseek-ai/dsh-typert-protocol": "0.2.2-rc.2",
+    "@deepseek-ai/dsh-tools": "0.2.2-rc.2",
+    "@deepseek-ai/dsh-llm": "0.2.2-rc.2"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/cordis": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-typert-protocol": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-tools": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-llm": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "esbuild": "0.25.12",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "author": "Maoyu",
+  "license": "MIT"
+}

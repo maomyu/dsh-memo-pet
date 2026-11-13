@@ -1,6 +1,6 @@
 {
   "name": "dsh-memo-pet",
-  "version": "0.1.1",
+  "version": "0.1.3",
   "description": "备忘精灵 · 住在 DSH 里的对话式备忘宠物，会自己藏起来，也会冒出来提醒你",
   "type": "module",
   "main": "./src/host.js",

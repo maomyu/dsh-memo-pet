@@ -392,10 +392,13 @@
   border-right: 0;
   border-radius: 13px 0 0 13px;
   background:
-    linear-gradient(90deg, color-mix(in oklab, var(--mp-surface-solid) 94%, transparent), var(--mp-surface-solid));
+    linear-gradient(90deg, color-mix(in oklab, var(--mp-surface-solid) 82%, transparent), var(--mp-surface-solid));
   backdrop-filter: blur(16px) saturate(140%);
   -webkit-backdrop-filter: blur(16px) saturate(140%);
-  box-shadow: -8px 0 22px -14px rgba(8, 6, 12, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  box-shadow:
+    -10px 0 26px -16px rgba(8, 6, 12, 0.62),
+    0 0 0 1px color-mix(in oklab, var(--mp-ember) 8%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07);
   cursor: pointer;
   transition: width 0.42s var(--mp-spring), border-radius 0.42s var(--mp-spring), background 0.3s ease;
   -webkit-tap-highlight-color: transparent;
@@ -427,6 +430,10 @@
 .mp-perch:hover,
 .mp-perch.is-hot {
   width: 32px;
+  box-shadow:
+    -12px 0 30px -16px rgba(255, 107, 61, 0.35),
+    0 0 0 1px color-mix(in oklab, var(--mp-ember) 22%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.09);
 }
 
 .mp-perch-rail {
@@ -450,8 +457,8 @@
 }
 
 .mp-perch-dots i {
-  width: 3px;
-  height: 3px;
+  width: 3.6px;
+  height: 3.6px;
   border-radius: 50%;
   background: color-mix(in oklab, var(--mp-text-3) 70%, transparent);
   transition: background 0.3s ease, transform 0.3s ease;
@@ -461,8 +468,8 @@
 .mp-perch.is-left { border-right-color: color-mix(in oklab, var(--mp-ember) 24%, var(--mp-line)); }
 
 .mp-perch-dots i:nth-child(2) {
-  width: 4px;
-  height: 4px;
+  width: 5px;
+  height: 5px;
   background: var(--mp-ember);
   box-shadow: 0 0 6px var(--mp-ember-glow);
   animation: mp-breathe 2.8s ease-in-out infinite;
@@ -474,10 +481,10 @@
 
 .mp-perch-count {
   position: absolute;
-  top: 6px;
+  top: 7px;
   left: 50%;
   transform: translateX(-50%);
-  font: 600 9px/1 var(--mp-mono);
+  font: 650 10px/1 var(--mp-mono);
   color: var(--mp-ember);
   letter-spacing: 0.02em;
 }

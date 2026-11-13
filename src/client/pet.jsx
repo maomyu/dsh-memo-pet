@@ -30,7 +30,7 @@ export function usePetRig({ onDragChange, onSettle, initial }) {
     rig.ty = y
     rig.vx = 0
     rig.vy = 0
-    if (float.current) float.current.style.transform = `translate3d(${x - SIZE / 2}px, ${y - SIZE / 2}px, 0)`
+    if (float.current) float.current.style.transform = `translate3d(${x}px, ${y}px, 0)`
   }, [rig])
 
   const setTarget = useCallback((x, y) => {
@@ -103,7 +103,7 @@ export function usePetRig({ onDragChange, onSettle, initial }) {
         if (r.y > maxY) { r.y = maxY; r.vy = -Math.abs(r.vy) * 0.42 }
       }
 
-      if (stage) stage.style.transform = `translate3d(${r.x - SIZE / 2}px, ${r.y - SIZE / 2}px, 0)`
+      if (stage) stage.style.transform = `translate3d(${r.x}px, ${r.y}px, 0)`
       if (!node) {
         raf = requestAnimationFrame(loop)
         return

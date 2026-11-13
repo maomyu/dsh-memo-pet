@@ -387,12 +387,8 @@ function Stage({ request }) {
     () => computePlacement(anchor.x, anchor.y, size, vie.w, vie.h),
     [anchor, size, vie],
   )
-  // children of .mp-float are laid out from its top-left, which sits half a pet
-  // above/left of the anchor point
-  const offset = {
-    x: placement.x - anchor.x + PET_HALF,
-    y: placement.y - anchor.y + PET_HALF,
-  }
+  // .mp-float sits exactly on the pet's centre; children are laid out from it
+  const offset = { x: placement.x - anchor.x, y: placement.y - anchor.y }
 
   const perchTop = useMemo(() => {
     const y = anchor.y
@@ -525,11 +521,11 @@ async function install(ctx) {
   const unmount = await ctx.remote.$mount({ package: PACKAGE, descriptors })
   const mounted = ctx.inject(['remote.' + SERVICE], scoped => {
     const request = createClient(scoped)
-    scoped.effect(() => scoped.slots.register({
+    scoped.effect(() => scoped.slots.inject('shell.overlay', () => scoped.slots.register({
       name: 'shell.overlay',
       id: 'memo-pet',
       order: 70,
-    }, () => <Stage request={request} />), 'memo-pet: overlay')
+    }, () => <Stage request={request} />)), 'memo-pet: overlay')
   })
   try {
     await mounted
